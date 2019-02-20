@@ -4,7 +4,8 @@
 #include<string>
 #include<iostream>
 #include<fstream>
-
+#include<chrono>
+#include<future>
 /*
 	这是一个基本的使用tcp协议连接服务器读写数据的过程;
 	基本流程:
@@ -36,9 +37,10 @@ namespace tcp_demo
 		//0:初始化相关资源
 		io_service g_is;
 		tcp::socket tcp_socket{ g_is };
-		const string host{ "www.baidu.com" };	//测试用域名
-		const string service{ "http" };
+		const string host{ "127.0.0.1" };	//测试用域名
+		const string service{ "19001" };
 		const string send_data{ "GET / HTTP/1.1\r\nHost:www.baidu.com\r\n\r\n" }; //mini HTTP request
+		const string quit{ "quit" };
 		fstream fs{ "storage.txt",ios::app };
 
 		array<char, 1024> async_read_buf{};
@@ -57,15 +59,21 @@ namespace tcp_demo
 		{
 			tcp::resolver::iterator end;
 			if (iter == end)
+			{
+				cout << "no such server...\n";
 				return;
+			}
+				
 			connect(tcp_socket, iter);
 		}
 
+	
 		//3:发送数据
 		void write_data(const string& data)
 		{
 			tcp_socket.write_some(boost::asio::buffer(data.c_str(), data.size()));
 			//tcp_socket.shutdown(tcp::socket::shutdown_send);
+			
 		}
 
 		//4:接收数据
@@ -79,7 +87,7 @@ namespace tcp_demo
 			{
 				read_bytes = tcp_socket.read_some(buffer(read_buf.data(), read_buf.size()), error);
 				//错误处理
-				if (error == boost::asio::error::eof)
+				if (error==boost::asio::error::eof)
 				{
 					cout << "read finished\n" << endl;
 					break;
@@ -89,8 +97,7 @@ namespace tcp_demo
 					throw boost::system::system_error{ error };
 				}
 				//处理数据
-				cout << "received " << read_bytes << " bytes\n";
-				fs << read_buf.data();
+				cout << "from server:" << read_buf.data()<<"\n";
 
 			}
 		}
@@ -114,10 +121,49 @@ namespace tcp_demo
 				cout << e.what() << endl;
 				return;
 			}
-			write_data(send_data);
-			read_data();
+
+		
+			//子线程读取
+			auto read_handler = []() {
+				try { read_data(); return 0; }
+				catch (std::exception& e)
+				{
+					cout << e.what() << endl; 
+					return -1;
+				}
+			};
+				
+			std::future<int> fut = std::async(std::launch::async, read_handler);
+			
+
+			//主线程写入
+			std::string sd_data{};
+			while (true) {
+				cin >> sd_data;
+				if (sd_data == quit)
+				{
+					tcp_socket.shutdown(tcp::socket::shutdown_send);
+					break;
+				}
+				try {
+					write_data(sd_data);
+				}
+				catch (std::exception& e)
+				{
+					cout << e.what() << endl;
+				}
+			}
+			cout << "write close\n";
+			
+			int rtn_cd=fut.get();	//等待read_handler返回
+			cout << "read close\n";
+			cout << "read_handler return code:" << rtn_cd << "\n";
+
 			clear_resource();
+			
 		}
+
+	
 	}
 
 	/*异步的tcp*/
@@ -127,7 +173,7 @@ namespace tcp_demo
 		io_service g_is;
 		tcp::socket tcp_socket{ g_is };
 		const string host{ "www.baidu.com" };
-		const string service{ "http" };
+		const string service{ "http"};
 		const string send_data{ "GET / HTTP/1.1\r\nHost:www.baidu.com\r\n\r\n" };
 		tcp::resolver resolver{ g_is };		//我们需要保持resolver的生存期,否则会因为需要访问resolver而其已被销毁时发生异常错误
 		array<char, 1024> read_buf{};
