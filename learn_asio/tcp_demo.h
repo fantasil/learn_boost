@@ -133,7 +133,7 @@ namespace tcp_demo
 				}
 			};
 				
-			std::future<int> fut = std::async(std::launch::async, read_handler);
+			std::future<int> fut = std::async(std::launch::async, read_handler); //子线程执行read_handler
 			
 
 			//主线程写入
@@ -155,7 +155,7 @@ namespace tcp_demo
 			}
 			cout << "write close\n";
 			
-			int rtn_cd=fut.get();	//等待read_handler返回
+			int rtn_cd=fut.get();	//等待read_handler返回,并取得返回值
 			cout << "read close\n";
 			cout << "read_handler return code:" << rtn_cd << "\n";
 
